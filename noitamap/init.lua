@@ -42,11 +42,13 @@ end
 function get_player()
     local player = EntityGetWithTag("player_unit")[1] or
                        EntityGetWithTag("polymorphed_player")[1] or nil
-    if player ~= nil then return player[1] end
+    if player ~= nil then return player end
 end
 
 -- Potential alternative approach to getting player coords from gokis cheat ui: 
+-- safe_string_format( ModSettingGet( "ui_timer_hits.position_string" ), math.floor( x ) )
 -- safe_string_format( ModSettingGet( "ui_timer_hits.depth_string" ), math.floor( y / 10 ) )
+
 function get_player_pos()
     local ourPlayer = get_player()
     local pos_x, pos_y = 0, 0
@@ -57,17 +59,18 @@ end
 -- Building URL to pass to the browser opening function
 function construct_url()
     local x_coord_url_param, y_coord_url_param = get_player_pos()
-    x_coord_url_param = tostring(x_coord_url_param)
-    y_coord_url_param = tostring(y_coord_url_param)
-    local zoom_param = "900"
+    x_coord_url_param = tostring(math.floor(x_coord_url_param))
+    y_coord_url_param = tostring(math.floor(y_coord_url_param))
+    local zoom_param = "930"
     local map_param = get_map_url_param()
 
     local base_url = ModSettingGet("noitamap.MAP_WEBSITE") or
                          "https://noitamap.com"
 
     -- Construct the full URL with the parameters
-    local full_url_string = base_url .. "/?x=" .. x_coord_url_param .. "&y=" .. y_coord_url_param .. "&zoom=" .. zoom_param .. "&map=" .. map_param
-    GamePrintImportant(tostring(full_url_string))
+    local full_url_string = base_url .. "/?x=" .. x_coord_url_param .. "&y=" ..
+                                y_coord_url_param .. "&zoom=" .. zoom_param ..
+                                "&map=" .. map_param
     return full_url_string
 end
 
@@ -106,5 +109,10 @@ end
 -- used to detect settings changes
 -- wiki: OnModSettingsChanged "Note: This callback doesn't appear to work. Modders have resorted to using OnPausedChanged instead to detect potential settings changes."
 
-function OnWorldPostUpdate() if InputIsKeyJustDown(16) then launch_browser() end end
-
+function OnWorldPostUpdate()
+    if InputIsKeyJustDown(16) then launch_browser() end
+    -- Debug show the URL on screen 
+    -- if InputIsKeyJustDown(17) then
+    --     GamePrintImportant(tostring(construct_url()))
+    -- end
+end
