@@ -1,0 +1,9 @@
+<Mod
+	name="Noita Map"
+	description="Opens Noita Map at Your Location"
+	tags="gameplay,quality of life,funny,graphics,audio"
+	dont_upload_folders=""
+	dont_upload_files=""
+	request_no_api_restrictions="1" 
+> 
+</Mod>
