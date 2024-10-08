@@ -1,10 +1,8 @@
 dofile("data/scripts/game_helpers.lua")
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("data/scripts/lib/coroutines.lua")
-dofile_once("scripts/detect_game_mode.lua")
-dofile_once("scripts/get_player_pos.lua")
-dofile_once("scripts/construct_url.lua")
-dofile_once("scripts/keys.lua")
+dofile_once("data/scripts/debug/keycodes.lua")
+dofile("data/scripts/lib/mod_settings.lua")
 
 -- Register custom audio bank
 ModRegisterAudioEventMappings("mods/noitamap/files/audio/GUIDs.txt")
@@ -51,92 +49,62 @@ end
 -- safe_string_format( ModSettingGet( "ui_timer_hits.depth_string" ), math.floor( y / 10 ) )
 function get_player_pos()
     local ourPlayer = get_player()
-    if not ourPlayer then return 0, 0 end
-    local pos_x, pos_y = EntityGetTransform(ourPlayer)
-    GlobalsSetValue("ourPlayer_pos_x", pos_x)
-    GlobalsSetValue("ourPlayer_pos_y", pos_y)
-    return EntityGetTransform(ourPlayer)
+    local pos_x, pos_y = 0, 0
+    if ourPlayer then pos_x, pos_y = EntityGetTransform(ourPlayer) end
+    return pos_x, pos_y
 end
 
 -- Building URL to pass to the browser opening function
 function construct_url()
-    local x_coord_url_param = tostring(GlobalsGetValue("ourPlayer_pos_x"))
-    local y_coord_url_param = tostring(GlobalsGetValue("ourPlayer_pos_y"))
+    local x_coord_url_param, y_coord_url_param = get_player_pos()
+    x_coord_url_param = tostring(x_coord_url_param)
+    y_coord_url_param = tostring(y_coord_url_param)
     local zoom_param = "900"
-    local map_param = tostring(GlobalsGetValue("map_name"))
+    local map_param = get_map_url_param()
 
-    if ModSettingGet("noitamap.mapwebsite") ~= nil then
-        base_url = ModSettingGet("noitamap.mapwebsite")
-    else
-        base_url = "https://noitamap.com"
-    end
+    local base_url = ModSettingGet("noitamap.MAP_WEBSITE") or
+                         "https://noitamap.com"
 
     -- Construct the full URL with the parameters
-    local full_url = base_url .. "/?x=" .. x_coord_url_param .. "&y=" ..
-                         y_coord_url_param .. "&zoom=" .. zoom_param .. "&map=" ..
-                         map_param
-    GlobalsSetValue("full_url_string", full_url)
-
+    local full_url_string = base_url .. "/?x=" .. x_coord_url_param .. "&y=" .. y_coord_url_param .. "&zoom=" .. zoom_param .. "&map=" .. map_param
+    GamePrintImportant(tostring(full_url_string))
     return full_url_string
 end
 
--- debug
-function informPlayers1() GamePrintImportant(full_url_string) end
-
 -- Using mod detection to open correct map
-function set_map_url_param()
-    if ModIsEnabled("Nightmare") then
-        GlobalsSetValue("map_name", "nightmare-main-branch")
-    elseif ModIsEnabled("nightmare") then
-        GlobalsSetValue("map_name", "nightmare-main-branch")
-    elseif ModIsEnabled("Apotheosis") then
-        GlobalsSetValue("map_name", "apotheosis")
-    elseif ModIsEnabled("apotheosis") then
-        GlobalsSetValue("map_name", "apotheosis")
-    elseif ModIsEnabled("Noitavania") then
-        GlobalsSetValue("map_name", "noitavania")
-    elseif ModIsEnabled("noitavania") then
-        GlobalsSetValue("map_name", "noitavania")
-    elseif ModIsEnabled("biome-plus") then
-        GlobalsSetValue("map_name", "alternate-biomes")
-    elseif ModIsEnabled("Alternate Biomes") then
-        GlobalsSetValue("map_name", "alternate-biomes")
+function get_map_url_param()
+    if ModIsEnabled("Nightmare") or ModIsEnabled("nightmare") then
+        return "nightmare-main-branch"
+    elseif ModIsEnabled("Apotheosis") or ModIsEnabled("apotheosis") then
+        return "apotheosis"
+    elseif ModIsEnabled("Noitavania") or ModIsEnabled("noitavania") then
+        return "noitavania"
+    elseif ModIsEnabled("biome-plus") or ModIsEnabled("Alternate Biomes") then
+        return "alternate-biomes"
     else
-        GlobalsSetValue("map_name", "regular-main-branch")
-        return map_name
+        return "regular-main-branch"
     end
 end
 
 function launch_browser()
-    if ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND") == true then
+
+    if tostring(ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND")) == "true" then
         GamePlaySound("mods/noitamap/files/audio/noitamap.bank", "create", 0, 0)
     end
-    win32_open(full_url_string)
+
+    local currentMapPos = construct_url()
+    win32_open(currentMapPos)
+
 end
 
 function OnPlayerSpawned(player_entity)
     GamePlaySound("mods/noitamap/files/audio/noitamap.bank",
                   "noitamap/dummy_sound", 0, 0)
-    -- launch_browser()
 
-    SetTimeOut(1.0, "mods/noitamap/scripts/debug_print_url.lua", "print_url")
-
-    launch_browser()
-    -- win32_open("https://nollagames.com")
 end
 
 -- used to detect settings changes
 -- wiki: OnModSettingsChanged "Note: This callback doesn't appear to work. Modders have resorted to using OnPausedChanged instead to detect potential settings changes."
-function OnPausedChanged(is_paused, is_inventory_paused)
-    if not ModSettingGet("noita-together.NT_NO_STAT_PROGRESS") and
-        GameHasFlagRun("NT_option_disable_progress") then
-        -- nt print_error("Removing no_progress flags, option disabled")
-        SetProgressDisable(false)
-    elseif ModSettingGet("noita-together.NT_NO_STAT_PROGRESS") and
-        not GameHasFlagRun("NT_option_disable_progress") then
-        -- nt print_error("Addding no_progress flags, option enabled")
-        SetProgressDisable(true)
-    end
-end
 
-function OnModSettingsChanged() end
+function OnWorldPostUpdate() if InputIsKeyJustDown(16) then launch_browser() end end
+
