@@ -38,6 +38,20 @@ function win32_open(path)
     shell32.ShellExecuteA(nil, "open", path, nil, nil, SHOWNORMAL)
 end
 
+function launch_browser()
+
+    local currentMapPos = construct_url()
+    win32_open(currentMapPos)
+
+end
+
+function play_where_sound()
+    if ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND") == true then
+        GamePlaySound("mods/noitmap/files/audio/noitmap.bank",
+                      "noitamap/create", get_player_pos())
+    end
+end
+
 -- Should work even the player is polymorphed, thanks Dexter
 function get_player()
     local player = EntityGetWithTag("player_unit")[1] or
@@ -76,6 +90,7 @@ end
 
 -- Using mod detection to open correct map
 function get_map_url_param()
+    local newgame_n = tonumber(SessionNumbersGetValue("NEW_GAME_PLUS_COUNT"))
     if ModIsEnabled("Nightmare") or ModIsEnabled("nightmare") then
         return "nightmare-main-branch"
     elseif ModIsEnabled("Apotheosis") or ModIsEnabled("apotheosis") then
@@ -84,20 +99,11 @@ function get_map_url_param()
         return "noitavania"
     elseif ModIsEnabled("biome-plus") or ModIsEnabled("Alternate Biomes") then
         return "alternate-biomes"
+    elseif newgame_n >= 1 then
+        return "new-game-plus-main-branch"
     else
         return "regular-main-branch"
     end
-end
-
-function launch_browser()
-
-    if tostring(ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND")) == "true" then
-        GamePlaySound("mods/noitamap/files/audio/noitamap.bank", "create", 0, 0)
-    end
-
-    local currentMapPos = construct_url()
-    win32_open(currentMapPos)
-
 end
 
 function OnPlayerSpawned(player_entity)
@@ -108,11 +114,23 @@ end
 
 -- used to detect settings changes
 -- wiki: OnModSettingsChanged "Note: This callback doesn't appear to work. Modders have resorted to using OnPausedChanged instead to detect potential settings changes."
-
 function OnWorldPostUpdate()
-    if InputIsKeyJustDown(16) then launch_browser() end
-    -- Debug show the URL on screen 
-    -- if InputIsKeyJustDown(17) then
-    --     GamePrintImportant(tostring(construct_url()))
-    -- end
+
+    if InputIsKeyJustDown(16) and ModSettingGet("noitamap.MAP_OPENING_ENABLED") ==
+        true then
+        if ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND") == true then
+            async(function()
+                play_where_sound()
+                wait(70)
+                launch_browser()
+            end)
+        else
+            launch_browser()
+        end
+    elseif InputIsKeyJustDown(16) and
+        ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND") == true then
+        play_where_sound()
+    end
 end
+
+function OnWorldPreUpdate() wake_up_waiting_threads(1) end

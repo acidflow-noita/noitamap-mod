@@ -1,11 +1,16 @@
 dofile("data/scripts/lib/mod_settings.lua")
 
 local mod_id = "noitamap"
-mod_settings_version = 1
+mod_settings_version = 2
 mod_settings = {
     {
+        id = "MAP_OPENING_ENABLED",
+        ui_name = "Open the map website when you press M on the keyboard",
+        value_default = true,
+        scope = MOD_SETTING_SCOPE_RUNTIME
+    }, {
         id = "PLAY_MAP_OPENING_SOUND",
-        ui_name = "Play sound when you press M to open the map",
+        ui_name = "Play sound when you press M on the keyboard to open the map website",
         value_default = true,
         scope = MOD_SETTING_SCOPE_RUNTIME
     }, {
