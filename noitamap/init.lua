@@ -46,18 +46,6 @@ function launch_browser()
     win32_open(currentMapPos)
 end
 
--- function play_voiceline()
---     if ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND") == true and
---         ModSettingGet("noitamap.PLAY_SPICY_SOUND") == true then
---         GamePlaySound("mods/noitmap/files/audio/noitmap.bank", "noitamap/where",
---                       get_player_or_camera_pos())
---     elseif ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND") == true and
---         ModSettingGet("noitamap.PLAY_SPICY_SOUND") ~= true then
---         GamePlaySound("mods/noitmap/files/audio/noitmap.bank", "noitamap/what",
---                       get_player_or_camera_pos())
---     end
--- end
-
 function play_voiceline()
     local is_voiceline_enabled =
         ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND")
