@@ -1,10 +1,16 @@
-# noitamap-mod
+# NoitaMap mod
 
 ## What is this mod? Is it new? Do you like it?
 
-Press `M` to open Noita Map at your location.
+### Features
+
+- Press `M` to open Noita Map in the browser at your current location in Noita.
+- Custom sound effects, which you can disable in the settings.
+
+## Supported game modes and custom mods
 
 Works with:
+
 - Regular game mod
 - NG+
 - Nightmare
@@ -24,5 +30,3 @@ I'm working on the fix for the [map](https://github.com/acidflow-noita/noitamap)
 ## Credits
 
 Huge thanks to Horscht and Dexter for their help to fix the draft.
-
-
