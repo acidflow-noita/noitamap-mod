@@ -29,4 +29,4 @@ I'm working on the fix for the [map](https://github.com/acidflow-noita/noitamap)
 
 ## Credits
 
-Huge thanks to Horscht and Dexter for their help to fix the draft.
+Huge thanks to [Horscht](https://github.com/TheHorscht) and [Dexter](https://github.com/dextercd) for their help.
