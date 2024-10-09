@@ -15,8 +15,9 @@
 {9e5f6674-ecca-4cb3-9e39-050604be24e9} bus:/music_reverb
 {8340afee-1bfb-481c-8b65-a1721703356c} bus:/reverb
 {40bdfd79-5dfd-4303-8a71-0792c637c380} bus:/ui
-{c7d655d8-ec85-4d25-bc91-cf2cca64fbb7} event:/noitamap/create
 {aaa5cf95-8067-45da-8ff3-5b64bcf430b8} event:/noitamap/dummy_sound
+{7f51bb85-2227-4cab-a0cf-e6610fdffddb} event:/noitamap/what
+{c7d655d8-ec85-4d25-bc91-cf2cca64fbb7} event:/noitamap/where
 {2f99f806-4b51-4b0a-a879-566644591f29} parameter:/Migration Name Conflict (3)/lowpass
 {6864bf18-2f50-4b34-aecc-63c1bdf7fdf4} parameter:/Migration Name Conflict (4)/Distance
 {ddf75d16-bdbe-4460-908b-0a29bd483835} parameter:/lowpass

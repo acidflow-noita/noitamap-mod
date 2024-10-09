@@ -4,21 +4,47 @@ local mod_id = "noitamap"
 mod_settings_version = 2
 mod_settings = {
     {
-        id = "MAP_OPENING_ENABLED",
-        ui_name = "Open the map website when you press M on the keyboard",
-        value_default = true,
-        scope = MOD_SETTING_SCOPE_RUNTIME
+        category_id = "group_of_settings1",
+        ui_name = "General Settings",
+        ui_description = "",
+        foldable = true,
+        _folded = false,
+        settings = {
+            {
+                id = "MAP_OPENING_ENABLED",
+                ui_name = "Open the map website when you press M on the keyboard",
+                ui_description = "You can disable this and have only the voiceline playing",
+                value_default = true,
+                scope = MOD_SETTING_SCOPE_RUNTIME
+            }, {
+                id = "MAP_WEBSITE",
+                ui_name = "Map website",
+                ui_description = "Website to open, do not type https:// as part of the address",
+                value_default = "noitamap.com",
+                scope = MOD_SETTING_SCOPE_RUNTIME
+            }
+        }
     }, {
-        id = "PLAY_MAP_OPENING_SOUND",
-        ui_name = "Play sound when you press M on the keyboard to open the map website",
-        value_default = true,
-        scope = MOD_SETTING_SCOPE_RUNTIME
-    }, {
-        id = "MAP_WEBSITE",
-        ui_name = "Map website",
-        ui_description = "Website to open",
-        value_default = "https://noitamap.com",
-        scope = MOD_SETTING_SCOPE_RUNTIME
+        category_id = "group_of_settings2",
+        ui_name = "Sound Settings",
+        ui_description = "",
+        foldable = true,
+        _folded = false,
+        settings = {
+            {
+                id = "PLAY_MAP_OPENING_SOUND",
+                ui_name = "Play a voiceline when you press M on the keyboard to open the map website",
+                ui_description = "What is this place?",
+                value_default = true,
+                scope = MOD_SETTING_SCOPE_RUNTIME
+            }, {
+                id = "PLAY_SPICY_SOUND",
+                ui_name = "Use a slighly spicier voiceline",
+                ui_description = "Remember when Shroud was fighting a dragon in CSGO back in the day?",
+                value_default = false,
+                scope = MOD_SETTING_SCOPE_RUNTIME
+            }
+        }
     }
 }
 function ModSettingsUpdate(init_scope)
@@ -32,3 +58,4 @@ end
 function ModSettingsGui(gui, in_main_menu)
     mod_settings_gui(mod_id, mod_settings, gui, in_main_menu)
 end
+
