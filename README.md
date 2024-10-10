@@ -7,6 +7,12 @@
 - Press `M` to open Noita Map in the browser at your current location in Noita.
 - Custom sound effects, which you can disable in the settings.
 
+## How to use the mod
+1. Download and uncompress [`noitamap.zip`](https://github.com/acidflow-noita/noitamap-mod/releases/download/1.0/noitamap.zip) and move the `noitamap` folder into the mods folder in Noita (Steam –> right click Noita –> Local files), mine is located in 
+```C:\Program Files (x86)\Steam\steamapps\common\Noita\mods```
+2. Launch Noita, click “Mods”, click “Unsafe mods: Disabled”, click “Yes” (this is due to deeper game integration requirements), click on “Noita Mmap” in the mods list so it shows `[x]`.
+3. Press `M` mid-run to open the map at your current location (due to an unresolved bug with the map iteself it might not go to your precise location).
+
 ## Supported game modes and custom mods
 
 Works with:
