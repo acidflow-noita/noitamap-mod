@@ -12,6 +12,8 @@
 ```C:\Program Files (x86)\Steam\steamapps\common\Noita\mods```
 2. Launch Noita, click “Mods”, click “Unsafe mods: Disabled”, click “Yes” (this is due to deeper game integration requirements), click on “Noita Mmap” in the mods list so it shows `[x]`.
 3. Press `M` mid-run to open the map at your current location (due to an unresolved bug with the map iteself it might not go to your precise location).
+4. This mod has options, adjust stuff to your needs. ![image](https://github.com/user-attachments/assets/f1d14e8e-b5da-47cd-8740-87d0b5a4faae)
+
 
 ## Supported game modes and custom mods
 
