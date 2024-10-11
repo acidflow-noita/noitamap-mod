@@ -4,7 +4,7 @@
 
 ### Features
 
-- Press `M` to open Noita Map in the browser at your current location in Noita.
+- When you press `M` on your keyboard, this mod opens the Noita Map in a new browser window, showing your current location in the game.
 - Custom sound effects, which you can disable in the settings.
 
 ## How to use the mod
