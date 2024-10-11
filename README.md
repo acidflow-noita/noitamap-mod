@@ -2,6 +2,8 @@
 
 ## What is this mod? Is it new? Do you like it?
 
+This is a companion mod for the [NoitaMap](https://noitamap.com).
+
 ### Features
 
 - When you press `M` on your keyboard, this mod opens the Noita Map in a new browser window, showing your current location in the game.
