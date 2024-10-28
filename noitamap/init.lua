@@ -54,23 +54,36 @@ function play_voiceline()
         local sound_path = "noitamap/what"
         if play_spicy_sound then sound_path = "noitamap/where" end
         GamePlaySound("mods/noitmap/files/audio/noitmap.bank", sound_path,
-                      get_player_or_camera_pos())
+            get_player_or_camera_pos())
     end
 end
 
 -- Getting player entity, should work even the player is polymorphed, thanks Dexter
 function get_player()
     local player = EntityGetWithTag("player_unit")[1] or
-                       EntityGetWithTag("polymorphed_player")[1] or nil
+        EntityGetWithTag("polymorphed_player")[1] or nil
     if player ~= nil then return player end
 end
 
 -- Fallback to getting camera coordinates in case the player died
 function get_current_camera_pos()
     local cam_x, cam_y = GameGetCameraPos()
-    cam_x = tostring(math.floor(cam_x))
-    cam_y = tostring(math.floor(cam_y))
+    cam_x = math.floor(cam_x)
+    cam_y = math.floor(cam_y)
     return cam_x, cam_y
+end
+
+-- Determine in which // world the player is
+function get_current_pw()
+    local ourPlayer = get_player()
+    local pos_x, pos_y = 0, 0
+    if ourPlayer then
+        pos_x, pos_y = EntityGetTransform(ourPlayer)
+    else
+        pos_x, pos_y = get_current_camera_pos()
+    end
+    local pw = GetParallelWorldPosition(pos_x, pos_y)
+    return pw
 end
 
 -- Current in-game coordinates
@@ -106,28 +119,52 @@ end
 
 -- Building URL to pass to the browser opening function
 function construct_url()
-    local x_coord_url_param, y_coord_url_param = get_player_or_camera_pos()
-    x_coord_url_param = tostring(math.floor(x_coord_url_param))
-    y_coord_url_param = tostring(math.floor(y_coord_url_param))
-    -- Arbitrary map zoom level which mimics in-game viewport
+    local pos_x, pos_y = 0, 0
+    pos_x, pos_y = get_player_or_camera_pos()
+
+    -- Determine the current PW index
+    local pw = get_current_pw()
+
+    -- Define offsets for different mods
+    local PW_OFFSET = 35840 -- Default offset
+    if ModIsEnabled("Apotheosis") or ModIsEnabled("apotheosis") or
+        ModIsEnabled("Noitavania") or ModIsEnabled("noitavania") then
+        PW_OFFSET = 51200
+    end
+
+    -- Clamp the PW index to ±1
+    if pw == -1 or pw == 1 or pw == 0 then new_pw = 0 end
+    if pw < -1 then new_pw = pw + 1 end
+    if pw > 1 then new_pw = pw - 1 end
+
+    -- Adjust the x-coordinate to stay within clamped PWs
+    local clamped_x = pos_x - (new_pw * PW_OFFSET)
+
+    -- Construct URL parameters
+    local x_coord_url_param = tostring(math.floor(clamped_x))
+    local y_coord_url_param = tostring(math.floor(pos_y))
     local zoom_param = "930"
     local map_param = get_map_url_param()
-    local url_protocol = "https://"
+
     -- Get the base URL from settings, default to "noitamap.com" if not provided
+    local url_protocol = "https://"
     local base_url = ModSettingGet("noitamap.MAP_WEBSITE")
     if base_url == "" then base_url = "noitamap.com" end
 
     -- Construct the full URL with the parameters
-    local full_url_string = url_protocol .. base_url .. "/?x=" ..
-                                x_coord_url_param .. "&y=" .. y_coord_url_param ..
-                                "&zoom=" .. zoom_param .. "&map=" .. map_param
+    local full_url_string = url_protocol .. base_url ..
+        "/?x=" .. x_coord_url_param ..
+        "&y=" .. y_coord_url_param ..
+        "&zoom=" .. zoom_param ..
+        "&map=" .. map_param
+
     return full_url_string
 end
 
 function OnPlayerSpawned(player_entity)
     -- "Play" empty sound so the custom soundbank sounds work
     GamePlaySound("mods/noitamap/files/audio/noitamap.bank",
-                  "noitamap/dummy_sound", 0, 0)
+        "noitamap/dummy_sound", 0, 0)
 end
 
 -- Handling enabled mod settings and the map open command
@@ -149,7 +186,13 @@ function OnWorldPostUpdate()
         play_voiceline()
     end
     -- Debug: show full URL on screen if N has been pressed
-    -- if InputIsKeyJustDown(17) then GamePrintImportant(construct_url()) end
+    -- if InputIsKeyJustDown(17) then
+    --     GamePrintImportant(tostring(construct_url()))
+    -- end
+    -- Debug: show current PW
+    -- if InputIsKeyJustDown(18) then
+    --     GamePrintImportant(tostring(get_current_pw()))
+    -- end
 end
 
 -- Required to have async() working
