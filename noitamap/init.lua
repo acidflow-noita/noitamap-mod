@@ -98,6 +98,69 @@ function get_player_or_camera_pos()
     return pos_x, pos_y
 end
 
+-- Canonical ordered list of telescope unlock keys.
+-- Order MUST match the JS side (noitamap/src/unlocks.ts UNLOCK_KEYS).
+local UNLOCK_KEYS = {
+    "sea_lava", "crumbling_earth", "cloud_thunder", "nuke", "bomb_holy",
+    "necromancy", "material_cement", "firework", "exploding_deer", "spiral_shot",
+    "tentacle", "sea_mimic", "touch_grass", "cessation", "piss",
+    "kantele", "ocarina", "musicbox", "alchemy", "everything",
+    "divide", "bomb_holy_giga", "nukegiga", "mestari", "duplicate",
+    "pyramid", "dragon", "rain", "polymorph", "paint",
+    "maths", "funky", "fish", "homing_wand", "black_hole",
+    "rainbow_trail", "destruction",
+}
+
+-- base64url alphabet
+local B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+-- Collect unlocks from persistent flags and encode as base64url bitfield.
+function get_unlocks_param()
+    -- Build byte array from bitfield
+    local byte_count = math.ceil(#UNLOCK_KEYS / 8)
+    local bytes = {}
+    for i = 1, byte_count do bytes[i] = 0 end
+
+    for i, key in ipairs(UNLOCK_KEYS) do
+        local flag = "card_unlocked_" .. key
+        if HasFlagPersistent(flag) then
+            local byte_idx = math.floor((i - 1) / 8) + 1
+            local bit_pos = (i - 1) % 8
+            bytes[byte_idx] = bytes[byte_idx] + (2 ^ bit_pos)
+        end
+    end
+
+    -- base64url encode (no padding)
+    local result = {}
+    local i = 1
+    while i <= #bytes do
+        local b1 = bytes[i] or 0
+        local b2 = bytes[i + 1] or 0
+        local b3 = bytes[i + 2] or 0
+
+        local n = b1 * 65536 + b2 * 256 + b3
+
+        local c1 = math.floor(n / 262144) % 64
+        local c2 = math.floor(n / 4096) % 64
+        local c3 = math.floor(n / 64) % 64
+        local c4 = n % 64
+
+        result[#result + 1] = B64:sub(c1 + 1, c1 + 1)
+        result[#result + 1] = B64:sub(c2 + 1, c2 + 1)
+
+        if i + 1 <= #bytes then
+            result[#result + 1] = B64:sub(c3 + 1, c3 + 1)
+        end
+        if i + 2 <= #bytes then
+            result[#result + 1] = B64:sub(c4 + 1, c4 + 1)
+        end
+
+        i = i + 3
+    end
+
+    return table.concat(result)
+end
+
 -- Using mod detection to open the correct map
 function get_map_url_param()
     -- new game detection, thanks Horscht
@@ -113,7 +176,8 @@ function get_map_url_param()
     elseif newgame_n >= 1 then
         return "new-game-plus-main-branch"
     else
-        return "regular-main-branch"
+        -- Regular run: use dynamic map so seeds are rendered live
+        return "dynamic-main-branch"
     end
 end
 
@@ -147,21 +211,32 @@ function construct_url()
     local map_param = get_map_url_param()
 
     -- Get the base URL from settings, default to "noitamap.com" if not provided
-    local url_protocol = "https://"
     local base_url = ModSettingGet("noitamap.MAP_WEBSITE")
-    if base_url == "" then base_url = "noitamap.com" end
+    if base_url == nil or base_url == "" then base_url = "noitamap.com" end
+    local url_protocol = "https://"
+    if base_url:find("localhost") then url_protocol = "http://" end
 
-    -- Construct the full URL with the parameters
+    -- Construct the full URL with the parameters (short param names for dynamic map compat)
     local full_url_string = url_protocol .. base_url ..
         "/?x=" .. x_coord_url_param ..
         "&y=" .. y_coord_url_param ..
-        "&zoom=" .. zoom_param ..
-        "&map=" .. map_param
+        "&z=" .. zoom_param ..
+        "&m=" .. map_param
+
+    -- Append seed param for dynamic map so the website renders the correct world
+    if map_param == "dynamic-main-branch" and current_world_seed ~= nil then
+        full_url_string = full_url_string .. "&se=" .. tostring(current_world_seed)
+        -- Append encoded unlock state so the map generates with correct spell availability
+        full_url_string = full_url_string .. "&u=" .. get_unlocks_param()
+    end
 
     return full_url_string
 end
 
 function OnPlayerSpawned(player_entity)
+    -- Capture the world seed so we can pass it to the map URL
+    current_world_seed = tonumber(StatsGetValue("world_seed"))
+
     -- "Play" empty sound so the custom soundbank sounds work
     GamePlaySound("mods/noitamap/files/audio/noitamap.bank",
         "noitamap/dummy_sound", 0, 0)
@@ -169,9 +244,17 @@ end
 
 -- Handling enabled mod settings and the map open command
 function OnWorldPostUpdate()
-    if InputIsKeyJustDown(16) and ModSettingGet("noitamap.MAP_OPENING_ENABLED") ==
-        true then
-        if ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND") == true then
+    if not InputIsKeyJustDown(16) then return end
+
+    local map_enabled = ModSettingGet("noitamap.MAP_OPENING_ENABLED")
+    local sound_enabled = ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND")
+
+    -- Default to true when settings haven't been initialized yet
+    if map_enabled == nil then map_enabled = true end
+    if sound_enabled == nil then sound_enabled = true end
+
+    if map_enabled then
+        if sound_enabled then
             async(function()
                 play_voiceline()
                 wait(70)
@@ -180,9 +263,7 @@ function OnWorldPostUpdate()
         else
             launch_browser()
         end
-        -- Detecting if M has been pressed on the keyboard
-    elseif InputIsKeyJustDown(16) and
-        ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND") == true then
+    elseif sound_enabled then
         play_voiceline()
     end
     -- Debug: show full URL on screen if N has been pressed

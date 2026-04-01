@@ -1,7 +1,7 @@
 dofile("data/scripts/lib/mod_settings.lua")
 
 local mod_id = "noitamap"
-mod_settings_version = 2
+mod_settings_version = 3
 mod_settings = {
     {
         category_id = "group_of_settings1",
@@ -19,8 +19,14 @@ mod_settings = {
             }, {
                 id = "MAP_WEBSITE",
                 ui_name = "Map website",
-                ui_description = "Website to open, do not type https:// as part of the address",
+                ui_description = "Which noitamap website to open when you press M",
                 value_default = "noitamap.com",
+                values = {
+                    { "noitamap.com", "noitamap.com (prod)" },
+                    { "dynamic-map.noitamap.com", "dynamic-map.noitamap.com (dev)" },
+                    { "dev.noitamap.com", "dev.noitamap.com (future dev)" },
+                    { "localhost:5173", "localhost:5173 (local testing)" },
+                },
                 scope = MOD_SETTING_SCOPE_RUNTIME
             }
         }
@@ -48,7 +54,7 @@ mod_settings = {
     }
 }
 function ModSettingsUpdate(init_scope)
-    local old_version = mod_settings_get_version(mod_id) -- This can be used to migrate some settings between mod versions.
+    local old_version = mod_settings_get_version(mod_id)
     mod_settings_update(mod_id, mod_settings, init_scope)
 end
 function ModSettingsGuiCount()
@@ -58,4 +64,3 @@ end
 function ModSettingsGui(gui, in_main_menu)
     mod_settings_gui(mod_id, mod_settings, gui, in_main_menu)
 end
-
