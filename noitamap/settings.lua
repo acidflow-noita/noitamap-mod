@@ -1,7 +1,7 @@
 dofile("data/scripts/lib/mod_settings.lua")
 
 local mod_id = "noitamap"
-mod_settings_version = 3
+mod_settings_version = 4
 mod_settings = {
     {
         category_id = "group_of_settings1",
@@ -27,6 +27,26 @@ mod_settings = {
                     { "dev.noitamap.com", "dev.noitamap.com (future dev)" },
                     { "localhost:5173", "localhost:5173 (local testing)" },
                 },
+                scope = MOD_SETTING_SCOPE_RUNTIME
+            }, {
+                id = "BROWSER",
+                ui_name = "Browser to open the map in",
+                ui_description = "Pick a specific browser, or use the OS default.\nOn Linux/Proton leave on Default and set your\nsystem browser preference.",
+                value_default = "default",
+                values = {
+                    { "default", "OS default" },
+                    { "chrome",  "Google Chrome" },
+                    { "brave",   "Brave" },
+                    { "msedge",  "Microsoft Edge" },
+                    { "firefox", "Firefox" },
+                    { "custom",  "Custom path (set below)" },
+                },
+                scope = MOD_SETTING_SCOPE_RUNTIME
+            }, {
+                id = "BROWSER_CUSTOM_PATH",
+                ui_name = "Custom browser exe path",
+                ui_description = "Used only when Browser is set to Custom.\nFull path or exe name, e.g. opera.exe or\nC:\\Path\\To\\browser.exe",
+                value_default = "",
                 scope = MOD_SETTING_SCOPE_RUNTIME
             }
         }

@@ -41,9 +41,74 @@ function win32_open(path)
     shell32.ShellExecuteA(nil, "open", path, nil, nil, SHOWNORMAL)
 end
 
+-- Candidate exe paths to try per browser preference. We try short names
+-- first (resolved via Windows App Paths registry / PATH); if that fails
+-- we fall through to common install locations. This catches things like
+-- Firefox Developer Edition / Nightly, which don't register firefox.exe
+-- in App Paths. Paths are built from env vars so non-C-drive Windows
+-- installs and per-user (LOCALAPPDATA) installs are picked up. The final
+-- fallback in open_url is the OS URL handler.
+local PF = os.getenv("ProgramFiles") or "C:\\Program Files"
+local PFX86 = os.getenv("ProgramFiles(x86)") or "C:\\Program Files (x86)"
+local LA = os.getenv("LOCALAPPDATA") or ""
+
+local BROWSER_PATHS = {
+    chrome = {
+        "chrome.exe",
+        PF    .. "\\Google\\Chrome\\Application\\chrome.exe",
+        PFX86 .. "\\Google\\Chrome\\Application\\chrome.exe",
+        LA    .. "\\Google\\Chrome\\Application\\chrome.exe",
+    },
+    brave = {
+        "brave.exe",
+        PF    .. "\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+        PFX86 .. "\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+        LA    .. "\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+    },
+    msedge = {
+        "msedge.exe",
+        PFX86 .. "\\Microsoft\\Edge\\Application\\msedge.exe",
+        PF    .. "\\Microsoft\\Edge\\Application\\msedge.exe",
+    },
+    firefox = {
+        "firefox.exe",
+        PF    .. "\\Mozilla Firefox\\firefox.exe",
+        PFX86 .. "\\Mozilla Firefox\\firefox.exe",
+        PF    .. "\\Firefox Developer Edition\\firefox.exe",
+        PF    .. "\\Firefox Nightly\\firefox.exe",
+    },
+}
+
+function get_browser_candidates()
+    local pref = ModSettingGet("noitamap.BROWSER")
+    if pref == nil or pref == "" or pref == "default" then return nil end
+    if pref == "custom" then
+        local custom = ModSettingGet("noitamap.BROWSER_CUSTOM_PATH")
+        if custom == nil or custom == "" then return nil end
+        return { custom }
+    end
+    return BROWSER_PATHS[pref]
+end
+
+function open_url(url)
+    local SHOWNORMAL = 1
+    local candidates = get_browser_candidates()
+    if candidates ~= nil then
+        for _, exe in ipairs(candidates) do
+            local hinst = shell32.ShellExecuteA(nil, "open", exe, url, nil, SHOWNORMAL)
+            local code = tonumber(ffi.cast("intptr_t", hinst))
+            if code > 32 then return end
+        end
+        -- every candidate failed - fall through to OS URL handler so the
+        -- map still opens (Proton/Wine path; or a Windows machine without
+        -- the chosen browser installed).
+    end
+    shell32.ShellExecuteA(nil, "open", url, nil, nil, SHOWNORMAL)
+end
+
 function launch_browser()
     local currentMapPos = construct_url()
-    win32_open(currentMapPos)
+    open_url(currentMapPos)
 end
 
 function play_voiceline()
