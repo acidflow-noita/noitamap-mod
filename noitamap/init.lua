@@ -221,7 +221,8 @@ function construct_url()
         "/?x=" .. x_coord_url_param ..
         "&y=" .. y_coord_url_param ..
         "&z=" .. zoom_param ..
-        "&m=" .. map_param
+        "&m=" .. map_param ..
+        "&src=mod"
 
     -- Append seed param for dynamic map so the website renders the correct world
     if map_param == "dynamic-main-branch" and current_world_seed ~= nil then
