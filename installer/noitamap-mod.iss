@@ -121,17 +121,17 @@ begin
   end;
 
   // 3. Steam's default location without registry help.
-  if NoitaAt(ExpandConstant('{autopf32}\Steam')) then
+  if NoitaAt(ExpandConstant('{commonpf32}\Steam')) then
   begin
-    Result := ExpandConstant('{autopf32}\Steam\steamapps\common\Noita');
+    Result := ExpandConstant('{commonpf32}\Steam\steamapps\common\Noita');
     Exit;
   end;
 
   // 4. Common GOG locations (GOG installs have no steamapps structure).
   SetArrayLength(Candidates, 3);
-  Candidates[0] := ExpandConstant('{autopf32}\GOG Galaxy\Games\Noita');
+  Candidates[0] := ExpandConstant('{commonpf32}\GOG Galaxy\Games\Noita');
   Candidates[1] := 'C:\GOG Games\Noita';
-  Candidates[2] := ExpandConstant('{autopf}\GOG Galaxy\Games\Noita');
+  Candidates[2] := ExpandConstant('{commonpf}\GOG Galaxy\Games\Noita');
   for I := 0 to GetArrayLength(Candidates) - 1 do
     if FileExists(Candidates[I] + '\noita.exe') then
     begin
@@ -150,7 +150,7 @@ begin
   else
     // Detection failed: land the wizard on Steam's default so the user only
     // has to correct the drive, not type the whole path.
-    Result := ExpandConstant('{autopf32}\Steam\steamapps\common\Noita\mods\noitamap');
+    Result := ExpandConstant('{commonpf32}\Steam\steamapps\common\Noita\mods\noitamap');
 end;
 
 // Refuse obviously-wrong manual selections: the chosen folder must be named
