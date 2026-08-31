@@ -1,0 +1,24 @@
+PackageIdentifier: Acidflow.NoitamapMod
+PackageVersion: "<VERSION>"
+InstallerType: inno
+# Steam's install tree is user-writable, so per-user is the natural scope; the
+# installer allows overrides (PrivilegesRequiredOverridesAllowed), letting
+# winget --scope machine work for admin-only installs too.
+Scope: user
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+# The installer targets Noita's mods folder, not Program Files. Silent installs
+# use the auto-detected location (Steam registry / library VDF / GOG paths); if
+# detection fails, Inno falls back to Steam's default path. AppId is stable, so
+# winget upgrade re-runs into the same place.
+ProductCode: "{7E1FBF3E-9C21-4E7B-A2D0-5B6A44C0FBAF}_is1"
+ReleaseDate: <RELEASE-DATE>
+Installers:
+  - Architecture: x86
+    InstallerUrl: https://github.com/acidflow-noita/noitamap-mod/releases/download/<VERSION>/noitamap-mod-installer-<VERSION>-signed.exe
+    InstallerSha256: <SHA256-FROM-RELEASE>
+ManifestType: installer
+ManifestVersion: 1.6.0

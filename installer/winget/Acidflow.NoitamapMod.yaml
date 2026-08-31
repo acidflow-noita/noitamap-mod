@@ -1,0 +1,12 @@
+# winget manifest — Acidflow.NoitamapMod
+# Directory layout in the winget-pkgs PR:
+#   manifests/a/Acidflow/NoitamapMod/<version>/Acidflow.NoitamapMod.yaml            (this file)
+#   manifests/a/Acidflow/NoitamapMod/<version>/Acidflow.NoitamapMod.installer.yaml
+#   manifests/a/Acidflow/NoitamapMod/<version>/Acidflow.NoitamapMod.locale.en-US.yaml
+# Replace <VERSION> everywhere; fill InstallerSha256 from the release's SHA256SUMS.txt.
+# Validate locally: winget validate --manifest <dir>   then   winget install --manifest <dir>
+PackageIdentifier: Acidflow.NoitamapMod
+PackageVersion: "<VERSION>"
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

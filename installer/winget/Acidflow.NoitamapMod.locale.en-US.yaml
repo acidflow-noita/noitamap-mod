@@ -1,0 +1,27 @@
+PackageIdentifier: Acidflow.NoitamapMod
+PackageVersion: "<VERSION>"
+PackageLocale: en-US
+Publisher: Acidflow
+PublisherUrl: https://noitamap.com
+PublisherSupportUrl: https://github.com/acidflow-noita/noitamap-mod/issues
+PackageName: Noitamap Mod
+PackageUrl: https://github.com/acidflow-noita/noitamap-mod
+License: GPL-3.0
+LicenseUrl: https://github.com/acidflow-noita/noitamap-mod/blob/main/LICENSE
+ShortDescription: Companion mod for Noitamap — press M in Noita to open the map at your current location.
+Description: |-
+  Installs the Noitamap companion mod into Noita's mods folder. In-game, press M
+  to open noitamap.com at your current position in the world. The map follows
+  your run's spell unlock progress, and daily-run dynamic map generation is
+  supported. Works with NG+, Nightmare, Apotheosis, Noitavania and Alternate
+  Biomes. After installing, enable "Unsafe mods" in Noita's mod menu and tick
+  "Noita Map" (the mod uses elevated mod permissions to read the current world
+  position, which also means it cannot be distributed on the Steam Workshop).
+Moniker: noitamap-mod
+Tags:
+  - noita
+  - game-mod
+  - map
+ReleaseNotesUrl: https://github.com/acidflow-noita/noitamap-mod/releases/tag/<VERSION>
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

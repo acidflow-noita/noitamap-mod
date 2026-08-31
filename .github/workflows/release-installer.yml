@@ -1,0 +1,98 @@
+name: Build and sign installer
+
+# Builds the Windows installer (Inno Setup) and the plain noitamap.zip from the
+# tagged source, then submits the installer to SignPath for signing under the
+# SignPath Foundation OSS certificate, and attaches both to the GitHub release.
+#
+# Required repo/org secrets once the SignPath application is approved:
+#   SIGNPATH_API_TOKEN         CI user token from the SignPath organization
+# Required repo variables:
+#   SIGNPATH_ORGANIZATION_ID   from the SignPath org page
+#
+# SignPath project setup (one-time, in the SignPath web UI):
+#   project slug:        noitamap-mod
+#   artifact config:     single unsigned EXE (installer), deep-sign
+#   signing policies:    test-signing (self-service), release-signing (approved)
+# The trusted-build link back to this workflow is what lets the Foundation
+# verify the artifact came from this repository — do not build the EXE in a
+# different workflow and pass it in.
+
+on:
+  push:
+    tags: ["*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version from tag
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then v="${GITHUB_REF#refs/tags/}"; else v="0.0.0-ci$GITHUB_RUN_NUMBER"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Build noitamap.zip (portable/manual install)
+        shell: pwsh
+        run: Compress-Archive -Path noitamap -DestinationPath noitamap.zip
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        # iscc.exe ships preinstalled on windows-latest runners.
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\noitamap-mod.iss /DAppVer=${{ steps.ver.outputs.version }}
+
+      - name: Upload unsigned installer (input to signing)
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-unsigned
+          path: installer/out/noitamap-mod-installer-${{ steps.ver.outputs.version }}.exe
+          if-no-files-found: error
+
+      - name: Upload zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: noitamap-zip
+          path: noitamap.zip
+
+      - name: Submit to SignPath and wait for the signed artifact
+        uses: signpath/github-action-submit-signing-request@v1.2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: noitamap-mod
+          # Tag builds go through the approved release policy; manual runs use
+          # test-signing (a Foundation requirement: release signing must be
+          # gated on maintainer approval).
+          signing-policy-slug: ${{ startsWith(github.ref, 'refs/tags/') && 'release-signing' || 'test-signing' }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Rename signed installer
+        shell: bash
+        run: |
+          mv signed/noitamap-mod-installer-*.exe "noitamap-mod-installer-${{ steps.ver.outputs.version }}-signed.exe" 2>/dev/null \
+            || mv signed/*.exe "noitamap-mod-installer-${{ steps.ver.outputs.version }}-signed.exe"
+
+      - name: Compute checksums
+        shell: bash
+        run: sha256sum noitamap.zip noitamap-mod-installer-*-signed.exe > SHA256SUMS.txt
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            noitamap.zip
+            noitamap-mod-installer-${{ steps.ver.outputs.version }}-signed.exe
+            SHA256SUMS.txt
