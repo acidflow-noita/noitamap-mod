@@ -28,33 +28,104 @@ DefaultDirName={code:GetDefaultInstallDir}
 AppendDefaultDirName=no
 ; Re-installing over an existing mod folder is the normal upgrade path.
 DirExistsWarning=no
+;
+; ── Wizard pages ────────────────────────────────────────────────────────────
+; This installer copies ~140 KB of mod files into one auto-detected folder.
+; Every page that is not "where did it go" or "what do I do now" is noise, so
+; all of them are off:
+;   Welcome  - says nothing the title bar doesn't
+;   License  - GPL-3.0 grants use without acceptance, so a click-through accept
+;              dialog is legally meaningless here. The license text is still
+;              CONVEYED with the binary (see LICENSE in [Files]), which is what
+;              GPLv3 actually requires.
+;   Ready    - "click Install to continue" after we already know everything
+;   Group    - no program group to choose; [Icons] places a fixed one
+;   Dir      - skipped by ShouldSkipPage when Noita was auto-detected, and
+;              shown only when detection failed and we genuinely need input
+; What remains: (destination, only if needed) -> progress -> finished.
+DisableWelcomePage=yes
+DisableReadyPage=yes
 DisableProgramGroupPage=yes
-DisableWelcomePage=no
-LicenseFile=..\LICENSE
+DisableFinishedPage=no
 OutputDir=out
 OutputBaseFilename=noitamap-mod-installer-{#AppVer}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+; Icon of the installer EXE itself, and of the uninstaller Inno generates from
+; it. Without this you get Inno's generic setup icon, which is what makes an
+; installer look like anonymous downloaded software. Built from the site's own
+; favicon assets: 16/32/48 DIB entries plus a 256x256 PNG-compressed entry so
+; Windows has a crisp source at high DPI and in large-icon Explorer views.
+; Path is relative to this .iss file.
+SetupIconFile=noitamap.ico
 ; Steam sets user-writable ACLs on its install tree, so the default location
-; needs no elevation. `PrivilegesRequiredOverridesAllowed` lets a user whose
-; Noita lives somewhere admin-only re-run elevated, and lets winget pass
-; either scope without the installer fighting it.
+; needs no elevation and there is nothing for the user to decide.
+;
+; NOTE: do NOT add `dialog` to PrivilegesRequiredOverridesAllowed. That flag is
+; exactly what produces the "Install for all users / Install for me only"
+; chooser -- a meaningless question here, since the destination is Noita's own
+; mods folder either way, not a per-user vs per-machine program location.
+; `commandline` alone keeps /ALLUSERS working for `winget --scope machine` and
+; for the rare admin-only Noita install, without ever showing a page.
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog commandline
+PrivilegesRequiredOverridesAllowed=commandline
 UninstallDisplayName={#AppName} (Noita companion mod)
-UninstallDisplayIcon={uninstallexe}
+; Point Add/Remove Programs at the icon rather than at {uninstallexe}: the
+; uninstaller does carry SetupIconFile's icon, but naming the .ico explicitly
+; keeps the entry correct even if the uninstaller is mid-replacement, and gives
+; Windows the 256px variant to scale from.
+UninstallDisplayIcon={app}\noitamap.ico
+; Keep the uninstaller OUT of {app}. {app} is Noita's mods\noitamap folder, and
+; putting unins000.exe there costs three things: Noita's mod loader sees a stray
+; exe inside a mod folder; a running uninstaller cannot delete itself before the
+; directory-removal pass, so mods\noitamap survives an uninstall; and if the user
+; deletes the mod folder by hand (the common way to remove a Noita mod) the
+; uninstaller dies with it while its Add/Remove Programs entry lives on, pointing
+; at a missing exe -- a zombie entry that needs regedit to clear.
+;
+; Out here, that same hand-deletion leaves a WORKING uninstaller: it finds nothing
+; to remove, deregisters itself, and disappears. {localappdata}\Programs is the
+; conventional per-user install location, and DisableProgramGroupPage plus the
+; [Icons] entry below keep it reachable from the Start menu.
+UninstallFilesDir={localappdata}\Programs\Noitamap Mod
 ; No ArchitecturesAllowed line: the payload is plain data files, runs anywhere
 ; (Noita itself is 32-bit; the identifier set for this directive also changed
 ; across Inno 6.x, so leaving it unset is both correct and portable).
 
 [Files]
 Source: "..\noitamap\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+; GPLv3 requires the license to travel WITH the binary distribution. The wizard
+; no longer shows a license page (acceptance isn't required to use GPL software),
+; so conveying it as a file is what keeps us compliant. Noita ignores non-mod
+; files in a mod folder.
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+; Installed so UninstallDisplayIcon has a stable file to point at, and so the
+; Start-menu folder shortcut has an icon. Noita ignores non-mod files.
+Source: "noitamap.ico"; DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+; Discoverability for the relocated uninstaller. Settings -> Apps and
+; `winget uninstall Acidflow.NoitamapMod` both work regardless; this is for
+; users who go looking for an uninstaller by hand. Also gives them a shortcut
+; straight to the mod folder, which is where they'd otherwise be hunting.
+Name: "{autoprograms}\Noitamap Mod\Uninstall Noitamap Mod"; Filename: "{uninstallexe}"
+Name: "{autoprograms}\Noitamap Mod\Noitamap Mod folder"; Filename: "{app}"; IconFilename: "{app}\noitamap.ico"
 
 [Messages]
-; The default "Select Destination Location" copy talks about "the program";
-; make it say what actually matters here.
-WelcomeLabel2=This will install the [name] into your Noita mods folder.%n%nThe installer looks for Noita in your Steam libraries and GOG folders automatically — you only need to pick a folder manually if detection fails.%n%nAfter installing: launch Noita, open Mods, enable "Unsafe mods", and tick "Noita Map". Press M in a run to open the map.
+; The finished page is mandatory here (DisableFinishedPage=no) and is the only
+; place the user is told the mod still has to be switched on inside Noita.
+FinishedHeadingLabel=Installation complete
+; Default is "Click Finish to exit Setup." -- the button already says Finish.
+FinishedLabelNoIcons=
+ClickFinish=
+; The destination page only appears when auto-detection failed, so its wording
+; should say what we actually need from the user rather than the stock
+; "Setup will install [name] into the following folder".
+WizardSelectDir=Where is Noita installed?
+SelectDirDesc=Noita could not be found automatically.
+SelectDirLabel3=Choose Noita's mods folder. The mod must end up in a folder named "noitamap" inside it — for example D:\SteamLibrary\steamapps\common\Noita\mods\noitamap
+SelectDirBrowseLabel=Click Next to continue, or Browse to pick a different folder.
 
 [Code]
 // ---------------------------------------------------------------------------
@@ -62,6 +133,10 @@ WelcomeLabel2=This will install the [name] into your Noita mods folder.%n%nThe i
 // Order: HKCU Steam registry -> that Steam's libraryfolders.vdf (all library
 // drives) -> default Steam path -> common GOG paths -> fallback (user browses).
 // ---------------------------------------------------------------------------
+
+var
+  NoitaCached: String;
+  NoitaResolved: Boolean;
 
 function NoitaAt(const Root: String): Boolean;
 begin
@@ -140,17 +215,60 @@ begin
     end;
 end;
 
+// Detection runs once and is reused: DefaultDirName and ShouldSkipPage both
+// need the answer, and re-walking the registry and every library VDF per call
+// would be wasteful (and could disagree with itself mid-wizard).
+function ResolveNoita(): String;
+begin
+  if not NoitaResolved then
+  begin
+    NoitaCached := FindNoitaDir();
+    NoitaResolved := True;
+  end;
+  Result := NoitaCached;
+end;
+
 function GetDefaultInstallDir(Param: String): String;
 var
   Noita: String;
 begin
-  Noita := FindNoitaDir();
+  Noita := ResolveNoita();
   if Noita <> '' then
     Result := Noita + '\mods\noitamap'
   else
     // Detection failed: land the wizard on Steam's default so the user only
     // has to correct the drive, not type the whole path.
     Result := ExpandConstant('{commonpf32}\Steam\steamapps\common\Noita\mods\noitamap');
+end;
+
+// Only ask where to install when we could not work it out. When Noita was
+// detected, the destination page is a rhetorical question -- the answer is
+// always "that folder" -- so skip straight to installing. The finished page
+// reports where the files landed, so nothing is hidden from the user.
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (PageID = wpSelectDir) and (ResolveNoita() <> '');
+end;
+
+// With Welcome and Ready gone, the finished page is the only place left to say
+// what happened and what the user has to do in-game -- so it has to carry both.
+// It is NOT optional: an installer that copies files and vanishes leaves the
+// user with a mod that silently does nothing, because Noita ships it disabled
+// and refuses to load it at all until unsafe mods are allowed.
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpFinished then
+    WizardForm.FinishedLabel.Caption :=
+      'Don''t forget to enable the Noitamap Mod in the Noita Mods list.' + #13#10 +
+      '"Unsafe mods: Allowed" is required for it to work.' + #13#10#13#10 +
+      'In Noita:' + #13#10 +
+      '  1.  Open "Mods" from the main menu' + #13#10 +
+      '  2.  Click "Unsafe mods: Disabled" and confirm with "Yes"' + #13#10 +
+      '       (the mod needs this to read your position in the world)' + #13#10 +
+      '  3.  Tick "Noita Map" in the mod list so it shows [x]' + #13#10 +
+      '  4.  Press M during a run to open the map at your location' + #13#10#13#10 +
+      'Installed to:' + #13#10 +
+      ExpandConstant('{app}');
 end;
 
 // Refuse obviously-wrong manual selections: the chosen folder must be named
@@ -183,5 +301,31 @@ begin
                 'The mod will only load if this is really Noita''s mods folder. Install anyway?',
                 mbConfirmation, MB_YESNO) = IDNO then
         Result := False;
+  end;
+end;
+
+// Remove the mod folder itself, not just the files in it.
+//
+// Inno deletes the files it logged and then removes directories only if they
+// are empty. Even with the uninstaller relocated out of {app}, anything Noita
+// or the user dropped into the folder would keep it (and files\, files\audio\)
+// alive as empty-looking leftovers in the mods list. usPostUninstall runs after
+// the logged files are gone, so a DelTree here finishes the job.
+//
+// The guard is deliberate: {app} is whatever directory the user accepted on the
+// destination page, and NextButtonClick lets a determined user override the
+// validation. Recursively deleting an arbitrary chosen folder would be a
+// catastrophic uninstall, so only ever remove a folder that is literally named
+// "noitamap" and sits directly inside a folder named "mods".
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  App: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    App := RemoveBackslashUnlessRoot(ExpandConstant('{app}'));
+    if (CompareText(ExtractFileName(App), 'noitamap') = 0) and
+       (CompareText(ExtractFileName(ExtractFileDir(App)), 'mods') = 0) then
+      DelTree(App, True, True, True);
   end;
 end;

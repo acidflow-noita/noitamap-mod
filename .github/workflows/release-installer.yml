@@ -28,6 +28,12 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      # The `secrets` context is NOT available in step-level `if:` conditions,
+      # so hoist the "is signing configured yet?" test into an env var here,
+      # where secrets ARE allowed. Before SignPath approves the project this is
+      # 'false' and the workflow still builds a testable unsigned installer.
+      HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
@@ -42,13 +48,41 @@ jobs:
 
       - name: Build noitamap.zip (portable/manual install)
         shell: pwsh
-        run: Compress-Archive -Path noitamap -DestinationPath noitamap.zip
+        # Ships install.sh alongside the mod folder: Linux/Steam Deck users
+        # unpack and run ./install.sh, Windows users either run the .exe
+        # installer or drag the noitamap folder in by hand as before.
+        run: Compress-Archive -Path noitamap,install.sh -DestinationPath noitamap.zip
 
       - name: Build installer (Inno Setup)
         shell: pwsh
-        # iscc.exe ships preinstalled on windows-latest runners.
+        # Don't hardcode a version/bitness path: Inno ships as "Inno Setup 6"
+        # under Program Files (x86) on the current runner image, but 7 installs
+        # to Program Files, and the runner image can change under us. Resolve
+        # ISCC, and install it if the image doesn't carry it at all.
         run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\noitamap-mod.iss /DAppVer=${{ steps.ver.outputs.version }}
+          $iscc = @(
+            "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $iscc) {
+            $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
+          }
+          if (-not $iscc) {
+            Write-Host "Inno Setup not found on the image; installing via winget."
+            winget install --id JRSoftware.InnoSetup --silent --accept-package-agreements --accept-source-agreements
+            $iscc = @(
+              "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
+              "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "Could not locate ISCC.exe" }
+
+          Write-Host "Using $iscc"
+          & $iscc installer\noitamap-mod.iss /DAppVer=${{ steps.ver.outputs.version }}
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
 
       - name: Upload unsigned installer (input to signing)
         id: upload-unsigned
@@ -65,6 +99,10 @@ jobs:
           path: noitamap.zip
 
       - name: Submit to SignPath and wait for the signed artifact
+        # Skipped until the SignPath application is approved and the token is
+        # configured, so the workflow still produces a testable (unsigned)
+        # installer artifact in the meantime instead of failing red.
+        if: env.HAS_SIGNPATH == 'true'
         uses: signpath/github-action-submit-signing-request@v1.2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -79,17 +117,22 @@ jobs:
           output-artifact-directory: signed
 
       - name: Rename signed installer
+        if: env.HAS_SIGNPATH == 'true'
         shell: bash
         run: |
           mv signed/noitamap-mod-installer-*.exe "noitamap-mod-installer-${{ steps.ver.outputs.version }}-signed.exe" 2>/dev/null \
             || mv signed/*.exe "noitamap-mod-installer-${{ steps.ver.outputs.version }}-signed.exe"
 
       - name: Compute checksums
+        if: env.HAS_SIGNPATH == 'true'
         shell: bash
         run: sha256sum noitamap.zip noitamap-mod-installer-*-signed.exe > SHA256SUMS.txt
 
+      # Releases only ever carry SIGNED installers. On a tag build before
+      # SignPath approval this is skipped: grab the unsigned artifact from the
+      # run summary for testing instead of publishing an unsigned EXE.
       - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: ${{ startsWith(github.ref, 'refs/tags/') && env.HAS_SIGNPATH == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           files: |
