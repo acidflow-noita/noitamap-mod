@@ -111,6 +111,13 @@ jobs:
           Write-Host "Using $iscc"
           & $iscc installer\noitamap-mod.iss "/DAppVer=$env:APP_VERSION"
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+          "NOITAMAP_TEST_ISCC=$iscc" >> $env:GITHUB_ENV
+
+      - name: Test Windows install, clean upgrade and rollback
+        shell: pwsh
+        env:
+          NOITAMAP_TEST_INSTALLER: ${{ github.workspace }}\installer\out\noitamap-mod-installer-${{ steps.ver.outputs.version }}.exe
+        run: python -m unittest discover -s tests -p windows_installer_test.py -v
 
       - name: Upload unsigned installer (input to signing)
         id: upload-unsigned

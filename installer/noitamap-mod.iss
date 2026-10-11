@@ -137,6 +137,94 @@ SelectDirBrowseLabel=Click Next to continue, or Browse to pick a different folde
 var
   NoitaCached: String;
   NoitaResolved: Boolean;
+  UpgradeTarget: String;
+  UpgradeBackup: String;
+  UpgradeInstalled: Boolean;
+
+function IsModInstallDir(const Dir: String): Boolean;
+var
+  App, Mods: String;
+begin
+  App := RemoveBackslashUnlessRoot(ExpandFileName(Dir));
+  Mods := ExtractFileDir(App);
+  Result := (CompareText(ExtractFileName(App), 'noitamap') = 0) and
+    (CompareText(ExtractFileName(Mods), 'mods') = 0) and
+    FileExists(ExtractFileDir(Mods) + '\noita.exe');
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  App: String;
+begin
+  Result := '';
+  App := RemoveBackslashUnlessRoot(ExpandFileName(ExpandConstant('{app}')));
+  // This also validates remembered destinations and silent /DIR installs.
+  // Never replace an arbitrary folder accepted by an older installer.
+  if not IsModInstallDir(App) then
+    Result := 'Choose <Noita>\mods\noitamap, where <Noita> contains noita.exe.'
+  else if DirExists(App + '.previous') or FileExists(App + '.previous') then
+    Result := 'A previous upgrade backup already exists:' + #13#10 +
+      App + '.previous' + #13#10 +
+      'Recover or move that backup before installing again.';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Backup: String;
+begin
+  if CurStep = ssInstall then
+  begin
+    UpgradeTarget := RemoveBackslashUnlessRoot(ExpandFileName(ExpandConstant('{app}')));
+    if not IsModInstallDir(UpgradeTarget) then
+      RaiseException('Refusing to replace a folder outside Noita''s mods\noitamap.');
+    if DirExists(UpgradeTarget) then
+    begin
+      // Rename on the same volume, keeping the complete old version available
+      // until installation succeeds. Inno now copies into a clean directory.
+      Backup := UpgradeTarget + '.previous';
+      if not RenameFile(UpgradeTarget, Backup) then
+        RaiseException('Could not back up the existing mod. Close Noita and try again.');
+      UpgradeBackup := Backup;
+      Log('Backed up the existing mod to ' + UpgradeBackup);
+    end;
+  end
+  else if CurStep = ssPostInstall then
+  begin
+    UpgradeInstalled := True;
+    if UpgradeBackup <> '' then
+    begin
+      // DelTree removes junctions themselves, without following their targets.
+      if DelTree(UpgradeBackup, True, True, True) then
+        UpgradeBackup := ''
+      else
+      begin
+        Log('Could not remove the old mod backup: ' + UpgradeBackup);
+        SuppressibleMsgBox('The new mod is installed, but the old backup could not be removed.' + #13#10 +
+          'Close Noita and remove:' + #13#10 + UpgradeBackup, mbInformation, MB_OK, IDOK);
+      end;
+    end;
+  end;
+end;
+
+procedure DeinitializeSetup;
+begin
+  // Inno rolls back its own partial installation first. Restore the old folder
+  // on cancellation/error, including files no longer shipped by this version.
+  if (UpgradeBackup <> '') and (not UpgradeInstalled) then
+  begin
+    if DirExists(UpgradeTarget) then
+      DelTree(UpgradeTarget, True, True, True);
+    if RenameFile(UpgradeBackup, UpgradeTarget) then
+      Log('Restored the previous mod after an incomplete installation.')
+    else
+    begin
+      Log('Previous mod preserved at ' + UpgradeBackup);
+      SuppressibleMsgBox('Installation did not complete. Your previous mod is preserved at:' + #13#10 +
+        UpgradeBackup + #13#10 + 'Restore it to:' + #13#10 + UpgradeTarget,
+        mbError, MB_OK, IDOK);
+    end;
+  end;
+end;
 
 function NoitaAt(const Root: String): Boolean;
 begin
@@ -247,7 +335,7 @@ end;
 // reports where the files landed, so nothing is hidden from the user.
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
-  Result := (PageID = wpSelectDir) and (ResolveNoita() <> '');
+  Result := (PageID = wpSelectDir) and (ResolveNoita() <> '') and IsModInstallDir(WizardDirValue());
 end;
 
 // With Welcome and Ready gone, the finished page is the only place left to say
@@ -276,31 +364,22 @@ end;
 // mod silently won't load and the user blames the mod.
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
-  Dir, ModsParent, NoitaDir: String;
+  Dir: String;
 begin
   Result := True;
   if CurPageID = wpSelectDir then
   begin
-    Dir := WizardForm.DirEdit.Text;
-    if ExtractFileName(Dir) <> 'noitamap' then
-    begin
-      // Be forgiving: if they picked ...\mods, append \noitamap for them.
-      if ExtractFileName(Dir) = 'mods' then
-        WizardForm.DirEdit.Text := AddBackslash(Dir) + 'noitamap'
-      else if MsgBox('The install folder should be Noita''s "mods\noitamap" folder.' + #13#10 +
-                     'Currently selected:' + #13#10 + Dir + #13#10#13#10 +
-                     'Install anyway?', mbConfirmation, MB_YESNO) = IDNO then
-        Result := False;
-      Exit;
-    end;
-    ModsParent := ExtractFileDir(Dir);          // ...\mods
-    NoitaDir := ExtractFileDir(ModsParent);     // ...\Noita
-    if (ExtractFileName(ModsParent) <> 'mods') or
-       (not FileExists(NoitaDir + '\noita.exe')) then
-      if MsgBox('No noita.exe found next to this mods folder:' + #13#10 + Dir + #13#10#13#10 +
-                'The mod will only load if this is really Noita''s mods folder. Install anyway?',
-                mbConfirmation, MB_YESNO) = IDNO then
-        Result := False;
+    Dir := RemoveBackslashUnlessRoot(ExpandFileName(WizardForm.DirEdit.Text));
+    // Be forgiving: if they picked ...\mods, append \noitamap for them.
+    if CompareText(ExtractFileName(Dir), 'mods') = 0 then
+      Dir := AddBackslash(Dir) + 'noitamap';
+    WizardForm.DirEdit.Text := Dir;
+    Result := IsModInstallDir(Dir);
+    if not Result then
+      SuppressibleMsgBox('Choose Noita''s mods folder or its noitamap subfolder.' + #13#10 +
+        'The destination must be <Noita>\mods\noitamap, where <Noita> contains noita.exe.' + #13#10 +
+        'Selected: ' + Dir,
+        mbError, MB_OK, IDOK);
   end;
 end;
 
@@ -312,10 +391,9 @@ end;
 // alive as empty-looking leftovers in the mods list. usPostUninstall runs after
 // the logged files are gone, so a DelTree here finishes the job.
 //
-// The guard is deliberate: {app} is whatever directory the user accepted on the
-// destination page, and NextButtonClick lets a determined user override the
-// validation. Recursively deleting an arbitrary chosen folder would be a
-// catastrophic uninstall, so only ever remove a folder that is literally named
+// The guard remains necessary for destinations accepted by older installers,
+// which allowed users to override the validation. Never recursively delete an
+// arbitrary folder: only remove a folder that is literally named
 // "noitamap" and sits directly inside a folder named "mods".
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
