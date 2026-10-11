@@ -11,7 +11,7 @@ dofile("data/scripts/lib/mod_settings.lua")
 ModRegisterAudioEventMappings("mods/noitamap/files/audio/GUIDs.txt")
 
 -- "Play" empty sound so the custom soundbank sounds work
-GamePlaySound("mods/noitamap/files/audio/noitamap.bank", "dummy_sound", 0, 0)
+GamePlaySound("mods/noitamap/files/audio/noitamap.bank", "noitamap/dummy_sound", 0, 0)
 
 -- Browser opening snippet provided by Dexter
 local ffi = require("ffi")
@@ -84,33 +84,38 @@ function open_url(url)
     local candidates = get_browser_candidates()
     if candidates ~= nil then
         for _, exe in ipairs(candidates) do
-            local hinst = shell32.ShellExecuteA(nil, "open", exe, url, nil, SHOWNORMAL)
+            local hinst = shell32.ShellExecuteA(nil, "open", exe, '"' .. url .. '"', nil, SHOWNORMAL)
             local code = tonumber(ffi.cast("intptr_t", hinst))
             if code > 32 then
-                return
+                return true
             end
         end
         -- every candidate failed - fall through to OS URL handler so the
         -- map still opens (Proton/Wine path; or a Windows machine without
         -- the chosen browser installed).
     end
-    shell32.ShellExecuteA(nil, "open", url, nil, nil, SHOWNORMAL)
+    local hinst = shell32.ShellExecuteA(nil, "open", url, nil, nil, SHOWNORMAL)
+    return tonumber(ffi.cast("intptr_t", hinst)) > 32
 end
 
 function launch_browser()
     local currentMapPos = construct_url()
-    open_url(currentMapPos)
+    if currentMapPos == nil then
+        GamePrint("Noitamap: the current world seed is not available yet.")
+    elseif not open_url(currentMapPos) then
+        GamePrint("Noitamap: could not open a browser. Check the mod's browser setting.")
+    end
 end
 
 function play_voiceline()
     local is_voiceline_enabled = ModSettingGet("noitamap.PLAY_MAP_OPENING_SOUND")
     local play_spicy_sound = ModSettingGet("noitamap.PLAY_SPICY_SOUND")
-    if is_voiceline_enabled then
+    if is_voiceline_enabled ~= false then
         local sound_path = "noitamap/what"
         if play_spicy_sound then
             sound_path = "noitamap/where"
         end
-        GamePlaySound("mods/noitmap/files/audio/noitmap.bank", sound_path, get_player_or_camera_pos())
+        GamePlaySound("mods/noitamap/files/audio/noitamap.bank", sound_path, get_player_or_camera_pos())
     end
 end
 
@@ -302,12 +307,14 @@ end
 -- Using mod detection to open the correct map
 function get_map_url_param()
     -- new game detection, thanks Horscht
-    local newgame_n = tonumber(SessionNumbersGetValue("NEW_GAME_PLUS_COUNT"))
+    local newgame_n = tonumber(SessionNumbersGetValue("NEW_GAME_PLUS_COUNT")) or 0
     if ModIsEnabled("Nightmare") or ModIsEnabled("nightmare") then
         return "nightmare-main-branch"
     elseif ModIsEnabled("Apotheosis") or ModIsEnabled("apotheosis") then
-        return "apotheosis"
+        if newgame_n >= 1 then return "apotheosis-new-game-plus" end
+        return "apotheosis-beta-branch"
     elseif ModIsEnabled("Noitavania") or ModIsEnabled("noitavania") then
+        if newgame_n >= 1 then return "noitavania-new-game-plus" end
         return "noitavania"
     elseif ModIsEnabled("biome-plus") or ModIsEnabled("Alternate Biomes") then
         return "alternate-biomes"
@@ -325,7 +332,7 @@ function construct_url()
     pos_x, pos_y = get_player_or_camera_pos()
 
     -- Determine the current PW index
-    local pw = get_current_pw()
+    local pw = GetParallelWorldPosition(pos_x, pos_y)
 
     -- Define offsets for different mods
     local PW_OFFSET = 35840 -- Default offset
@@ -333,11 +340,13 @@ function construct_url()
         ModIsEnabled("noitavania") then
         PW_OFFSET = 51200
     end
+    if BiomeMapGetSize ~= nil then
+        local columns = BiomeMapGetSize()
+        if type(columns) == "number" and columns > 0 then PW_OFFSET = columns * 512 end
+    end
 
     -- Clamp the PW index to ±1
-    if pw == -1 or pw == 1 or pw == 0 then
-        new_pw = 0
-    end
+    local new_pw = 0
     if pw < -1 then
         new_pw = pw + 1
     end
@@ -369,8 +378,10 @@ function construct_url()
                                 "&z=" .. zoom_param .. "&m=" .. map_param .. "&src=mod"
 
     -- Append seed param for dynamic map so the website renders the correct world
-    if map_param == "dynamic-main-branch" and current_world_seed ~= nil then
-        full_url_string = full_url_string .. "&se=" .. tostring(current_world_seed)
+    if map_param == "dynamic-main-branch" then
+        local seed = tonumber(StatsGetValue("world_seed")) or current_world_seed
+        if seed == nil or seed < 0 or seed > 4294967295 or seed ~= math.floor(seed) then return nil end
+        full_url_string = full_url_string .. "&se=" .. string.format("%.0f", seed)
         -- Append encoded unlock state so the map generates with correct spell availability
         full_url_string = full_url_string .. "&u=" .. get_unlocks_param()
         -- Append achievement-pillar flags so the map renders the player's real pillar completion
@@ -407,11 +418,8 @@ function OnWorldPostUpdate()
 
     if map_enabled then
         if sound_enabled then
-            async(function()
-                play_voiceline()
-                wait(70)
-                launch_browser()
-            end)
+            play_voiceline()
+            launch_browser()
         else
             launch_browser()
         end

@@ -5,6 +5,7 @@
 # directory in the game install -- steamapps/common/Noita/mods -- so installing
 # is just "put the noitamap folder there". This script finds the game across
 # native, Flatpak and multi-library Steam setups, then copies it in.
+# Release installers include their own mod files; no ZIP download is needed.
 #
 #   ./install.sh                     install (auto-detect Noita)
 #   ./install.sh --dir /path/Noita   install into a specific Noita directory
@@ -19,6 +20,7 @@ set -eu
 MOD_ID=noitamap
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SRC="$SELF_DIR/$MOD_ID"
+PAYLOAD_SHA256='__NOITAMAP_PAYLOAD_SHA256__'
 
 DRY=0
 UNINSTALL=0
@@ -26,7 +28,7 @@ NOITA_DIR=
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 info() { printf '%s\n' "$*"; }
-run() { if [ "$DRY" -eq 1 ]; then printf '  [dry-run] %s\n' "$*"; else eval "$@"; fi; }
+run() { if [ "$DRY" -eq 1 ]; then printf '  [dry-run] %s\n' "$*"; else "$@"; fi; }
 
 usage() {
   sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
@@ -142,14 +144,34 @@ DEST="$MODS_DIR/$MOD_ID"
 if [ "$UNINSTALL" -eq 1 ]; then
   [ -d "$DEST" ] || { info "Not installed (nothing at $DEST)"; exit 0; }
   info "Removing $DEST"
-  run "rm -rf -- '$DEST'"
+  run rm -rf -- "$DEST"
   info "Done. The mod is removed; your Noita save and settings are untouched."
   exit 0
 fi
 
+STAGE=
+BACKUP=
+PAYLOAD_DIR=
+cleanup() {
+  [ -z "$STAGE" ] || rm -rf -- "$STAGE"
+  if [ -n "$BACKUP" ] && [ ! -e "$DEST" ] && [ ! -L "$DEST" ]; then
+    mv -- "$BACKUP" "$DEST"
+  fi
+  [ -z "$PAYLOAD_DIR" ] || rm -rf -- "$PAYLOAD_DIR"
+}
+trap cleanup EXIT
+
+if grep -q '^__NOITAMAP_PAYLOAD__$' "$0"; then
+  PAYLOAD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/noitamap-payload.XXXXXX")
+  sed '1,/^__NOITAMAP_PAYLOAD__$/d' "$0" | base64 -d > "$PAYLOAD_DIR/mod.tar.gz"
+  actual=$(sha256sum < "$PAYLOAD_DIR/mod.tar.gz")
+  [ "${actual%% *}" = "$PAYLOAD_SHA256" ] || die "installer payload checksum does not match; download it again"
+  tar -xzf "$PAYLOAD_DIR/mod.tar.gz" -C "$PAYLOAD_DIR"
+  SRC="$PAYLOAD_DIR/$MOD_ID"
+fi
+
 [ -d "$SRC" ] || die "mod files not found next to this script (expected $SRC).
-Run this from the unpacked release, so that install.sh and the $MOD_ID/ folder
-sit side by side."
+Use install.sh from the release assets, or run this source script beside the $MOD_ID/ folder."
 [ -f "$SRC/mod.xml" ] || die "$SRC exists but has no mod.xml -- wrong folder?"
 # Writability is only assertable for a directory that exists. Checking it
 # unconditionally broke --dry-run, which never creates mods/ and so always
@@ -158,16 +180,26 @@ if [ -d "$MODS_DIR" ]; then
   [ -w "$MODS_DIR" ] || die "no write permission on $MODS_DIR"
 else
   info "Creating $MODS_DIR"
-  run "mkdir -p -- '$MODS_DIR'"
+  run mkdir -p -- "$MODS_DIR"
 fi
 
-if [ -d "$DEST" ]; then
-  info "Replacing existing install at $DEST"
-  run "rm -rf -- '$DEST'"
+info "Installing to $DEST"
+if [ "$DRY" -eq 1 ]; then
+  run cp -R -- "$SRC" "$DEST"
 else
-  info "Installing to $DEST"
+  # Finish copying before replacing anything. This also works when the ZIP
+  # was unpacked into mods/ and SRC is already DEST.
+  STAGE=$(mktemp -d "$MODS_DIR/.noitamap-install.XXXXXX")
+  cp -R -- "$SRC/." "$STAGE/"
+  [ -f "$STAGE/mod.xml" ] || die "staged copy has no mod.xml"
+  if [ -e "$DEST" ] || [ -L "$DEST" ]; then
+    BACKUP="$STAGE.previous"
+    mv -- "$DEST" "$BACKUP"
+  fi
+  mv -- "$STAGE" "$DEST"
+  STAGE=
+  if [ -n "$BACKUP" ]; then rm -rf -- "$BACKUP"; BACKUP=; fi
 fi
-run "cp -R -- '$SRC' '$DEST'"
 
 if [ "$DRY" -eq 0 ]; then
   [ -f "$DEST/mod.xml" ] || die "copy failed: $DEST/mod.xml missing"
@@ -185,3 +217,6 @@ Next steps in Noita:
 
 Uninstall later with:  $0 --uninstall
 EOF
+
+# Generated release scripts append a checksum-verified payload after this.
+exit 0

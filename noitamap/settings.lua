@@ -19,7 +19,7 @@ mod_settings = {
             }, {
                 id = "MAP_WEBSITE",
                 ui_name = "Map website",
-                ui_description = "Which noitamap website to open when you press M",
+                ui_description = "Which noitamap website to open when you press M.\nUse the same website as your existing map tab\nto reuse its loaded map.",
                 value_default = "noitamap.com",
                 values = {
                     { "noitamap.com", "noitamap.com (prod)" },

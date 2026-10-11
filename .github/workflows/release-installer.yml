@@ -1,8 +1,8 @@
-name: Build and sign installer
+name: Release mod and installers
 
-# Builds the Windows installer (Inno Setup) and the plain noitamap.zip from the
-# tagged source, then submits the installer to SignPath for signing under the
-# SignPath Foundation OSS certificate, and attaches both to the GitHub release.
+# Publish one complete release after the ZIP and both installers are ready.
+# Without signing credentials the EXE is explicitly labelled unsigned.
+# A configured signing failure never downgrades to an unsigned publication.
 #
 # Required repo/org secrets once the SignPath application is approved:
 #   SIGNPATH_API_TOKEN         CI user token from the SignPath organization
@@ -23,19 +23,48 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  portable:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install LuaJIT
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y luajit
+      - name: Validate release source and package
+        run: |
+          luajit tests/runtime.lua
+          python3 -m unittest discover -s tests -p '*_test.py' -v
+          python3 build_release.py
+      - name: Save portable package
+        uses: actions/upload-artifact@v7
+        with:
+          name: noitamap-zip
+          path: |
+            dist/noitamap.zip
+            dist/install.sh
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          overwrite: true
+
   build:
+    needs: portable
     runs-on: windows-latest
     env:
       # The `secrets` context is NOT available in step-level `if:` conditions,
       # so hoist the "is signing configured yet?" test into an env var here,
       # where secrets ARE allowed. Before SignPath approves the project this is
-      # 'false' and the workflow still builds a testable unsigned installer.
+      # 'false' and the workflow publishes an explicitly unsigned installer.
       HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
     outputs:
       version: ${{ steps.ver.outputs.version }}
+      signed: ${{ steps.package.outputs.signed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,18 +72,17 @@ jobs:
         id: ver
         shell: bash
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then v="${GITHUB_REF#refs/tags/}"; else v="0.0.0-ci$GITHUB_RUN_NUMBER"; fi
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then v="${GITHUB_REF#refs/tags/}"; v="${v#v}"; else v="0.0.0-ci$GITHUB_RUN_NUMBER"; fi
+          if [[ ! "$v" =~ ^[0-9]+(\.[0-9]+){1,3}(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Use a version tag such as 4.4.1"
+            exit 1
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
-
-      - name: Build noitamap.zip (portable/manual install)
-        shell: pwsh
-        # Ships install.sh alongside the mod folder: Linux/Steam Deck users
-        # unpack and run ./install.sh, Windows users either run the .exe
-        # installer or drag the noitamap folder in by hand as before.
-        run: Compress-Archive -Path noitamap,install.sh -DestinationPath noitamap.zip
 
       - name: Build installer (Inno Setup)
         shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
         # Don't hardcode a version/bitness path: Inno ships as "Inno Setup 6"
         # under Program Files (x86) on the current runner image, but 7 installs
         # to Program Files, and the runner image can change under us. Resolve
@@ -81,7 +109,7 @@ jobs:
           if (-not $iscc) { throw "Could not locate ISCC.exe" }
 
           Write-Host "Using $iscc"
-          & $iscc installer\noitamap-mod.iss /DAppVer=${{ steps.ver.outputs.version }}
+          & $iscc installer\noitamap-mod.iss "/DAppVer=$env:APP_VERSION"
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
 
       - name: Upload unsigned installer (input to signing)
@@ -91,17 +119,12 @@ jobs:
           name: installer-unsigned
           path: installer/out/noitamap-mod-installer-${{ steps.ver.outputs.version }}.exe
           if-no-files-found: error
-
-      - name: Upload zip
-        uses: actions/upload-artifact@v4
-        with:
-          name: noitamap-zip
-          path: noitamap.zip
+          overwrite: true
 
       - name: Submit to SignPath and wait for the signed artifact
         # Skipped until the SignPath application is approved and the token is
-        # configured, so the workflow still produces a testable (unsigned)
-        # installer artifact in the meantime instead of failing red.
+        # configured. The unsigned path is explicit; a configured signing
+        # failure stops the build and prevents release publication.
         if: env.HAS_SIGNPATH == 'true'
         uses: signpath/github-action-submit-signing-request@v1.2
         with:
@@ -116,26 +139,92 @@ jobs:
           wait-for-completion: true
           output-artifact-directory: signed
 
-      - name: Rename signed installer
-        if: env.HAS_SIGNPATH == 'true'
-        shell: bash
+      - name: Prepare Windows release asset
+        id: package
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          mv signed/noitamap-mod-installer-*.exe "noitamap-mod-installer-${{ steps.ver.outputs.version }}-signed.exe" 2>/dev/null \
-            || mv signed/*.exe "noitamap-mod-installer-${{ steps.ver.outputs.version }}-signed.exe"
+          New-Item -ItemType Directory -Force release | Out-Null
+          if ($env:HAS_SIGNPATH -eq 'true') {
+            $files = @(Get-ChildItem signed -Filter *.exe -Recurse)
+            if ($files.Count -ne 1) { throw 'Expected exactly one signed installer' }
+            $source = $files[0].FullName
+            $kind = 'signed'
+          } else {
+            $source = "installer/out/noitamap-mod-installer-$env:APP_VERSION.exe"
+            $kind = 'unsigned'
+          }
+          $name = "noitamap-mod-installer-$env:APP_VERSION-$kind.exe"
+          Copy-Item -LiteralPath $source -Destination "release/$name"
+          $hash = (Get-FileHash "release/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText("$PWD/release/SHA256SUMS-windows.txt", "$hash  $name`n", [Text.UTF8Encoding]::new($false))
+          "signed=$env:HAS_SIGNPATH" >> $env:GITHUB_OUTPUT
 
-      - name: Compute checksums
-        if: env.HAS_SIGNPATH == 'true'
-        shell: bash
-        run: sha256sum noitamap.zip noitamap-mod-installer-*-signed.exe > SHA256SUMS.txt
+      - name: Save Windows release asset
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-release
+          overwrite: true
+          if-no-files-found: error
+          path: |
+            release/*.exe
+            release/SHA256SUMS-windows.txt
 
-      # Releases only ever carry SIGNED installers. On a tag build before
-      # SignPath approval this is skipped: grab the unsigned artifact from the
-      # run summary for testing instead of publishing an unsigned EXE.
-      - name: Attach to release
-        if: ${{ startsWith(github.ref, 'refs/tags/') && env.HAS_SIGNPATH == 'true' }}
+  publish:
+    name: Publish complete release
+    needs: [portable, build]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: noitamap-zip
+          path: release
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-release
+          path: release
+      - name: Verify assets and prepare release notes
+        working-directory: release
+        env:
+          INSTALLER_SIGNED: ${{ needs.build.outputs.signed }}
+        run: |
+          sha256sum -c SHA256SUMS.txt
+          sha256sum -c SHA256SUMS-windows.txt
+          cat SHA256SUMS-windows.txt >> SHA256SUMS.txt
+          cat > RELEASE.txt <<'NOTES'
+          - **Windows:** download and run the `.exe` installer.
+          - **Manual installation:** extract `noitamap.zip` into Noita's `mods` folder. The resulting path must be `mods/noitamap/mod.xml`.
+          - **Linux / Steam Deck:** download `install.sh` and run `sh install.sh`. It includes the mod; no separate ZIP is needed.
+
+          Enable **Noita Map** and **Unsafe mods** in Noita, then press **M** during a run.
+          NOTES
+          if [ "$INSTALLER_SIGNED" = true ]; then
+            echo 'The Windows installer is signed.' >> RELEASE.txt
+          else
+            echo 'The Windows installer is unsigned and is labelled `-unsigned.exe`.' >> RELEASE.txt
+          fi
+      - name: Publish all installable assets
+        id: release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release/RELEASE.txt
+          fail_on_unmatched_files: true
           files: |
-            noitamap.zip
-            noitamap-mod-installer-${{ steps.ver.outputs.version }}-signed.exe
-            SHA256SUMS.txt
+            release/noitamap.zip
+            release/install.sh
+            release/*.exe
+            release/SHA256SUMS.txt
+      - name: Release verdict
+        env:
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+          INSTALLER_SIGNED: ${{ needs.build.outputs.signed }}
+        run: |
+          if [ "$INSTALLER_SIGNED" = true ]; then kind=signed; else kind=unsigned; fi
+          verdict="RELEASE: PUBLISHED — mod ZIP, standalone Linux installer and $kind Windows installer."
+          echo "$verdict"
+          echo "**$verdict**" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Download release]($RELEASE_URL)" >> "$GITHUB_STEP_SUMMARY"

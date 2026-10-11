@@ -42,3 +42,9 @@ luac.out
 
 # Inno Setup build output
 installer/out/
+
+# Portable release checks and generated checksums
+__pycache__/
+*.pyc
+/SHA256SUMS.txt
+/dist/

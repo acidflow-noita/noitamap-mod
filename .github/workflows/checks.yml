@@ -1,0 +1,20 @@
+name: Mod checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  runtime-and-installer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install LuaJIT
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y luajit
+      - name: Exercise mod logic with game and browser APIs stubbed
+        run: luajit tests/runtime.lua
+      - name: Exercise installer against temporary fake game directories
+        run: python3 -m unittest discover -s tests -p '*_test.py' -v
